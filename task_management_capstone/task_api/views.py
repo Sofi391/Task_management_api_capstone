@@ -1,5 +1,7 @@
 from rest_framework.generics import ListAPIView, CreateAPIView
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import IsAuthenticated
+from .permissions import IsManagerOrReadOnly,IsManager,IsManagerOrOwner,IsManagerOrTransactionOwner
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django.core.mail import send_mail
@@ -51,6 +53,7 @@ class SupplierViewSet(ModelViewSet):
     serializer_class = SupplierSerializer
     lookup_field = 'slug'
     pagination_class = PageNumberPagination
+    permission_classes = [IsAuthenticated,IsManagerOrReadOnly]
     filter_backends = (filters.SearchFilter,)
     search_fields = ('name','products__name','products__category')
 
@@ -69,6 +72,7 @@ class ProductViewSet(ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
     pagination_class = PageNumberPagination
+    permission_classes = [IsAuthenticated,IsManagerOrReadOnly]
     lookup_field = 'slug'
     filter_backends = (filters.SearchFilter,filters.OrderingFilter)
     search_fields = ('name','category','sku','supplier__name')
@@ -87,11 +91,12 @@ class PurchaseViewSet(ModelViewSet):
     queryset = PurchaseOrder.objects.all()
     serializer_class = PurchaseOrderSerializer
     pagination_class = PageNumberPagination
+    permission_classes = [IsAuthenticated,IsManager]
     ordering = ('-created_at',)
     filter_backends = (filters.SearchFilter,)
     search_fields = ('product__name','product__category')
 
-    @action(detail=True,methods=['post'])
+    @action(detail=True,methods=['post'],permission_classes=[IsAuthenticated,IsManager])
     def complete(self, request, pk=None):
         purchase = self.get_object()
         if purchase.status != 'Pending':
@@ -120,9 +125,18 @@ class SaleViewSet(ModelViewSet):
     queryset = Sale.objects.all()
     serializer_class = SaleSerializer
     pagination_class = PageNumberPagination
+    permission_classes = [IsAuthenticated,IsManagerOrOwner]
     ordering = ('-created_at',)
     filter_backends = (filters.SearchFilter,)
     search_fields = ('product__name','product__category')
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.request.user.is_staff or self.request.user.groups.filter(name='Manager').exists():
+            queryset = Sale.objects.all()
+        else:
+            queryset = queryset.filter(sold_by=self.request.user)
+        return queryset
 
     def perform_create(self, serializer):
         product = serializer.validated_data['product']
@@ -159,6 +173,7 @@ class StockTransactionListView(ListAPIView):
     queryset = StockTransaction.objects.all()
     serializer_class = StockTransactionSerializer
     pagination_class = PageNumberPagination
+    permission_classes = [IsManagerOrTransactionOwner]
 
     filter_backends = (filters.SearchFilter,filters.OrderingFilter)
     search_fields = ('product__name','product__category','created_by__username')
@@ -167,6 +182,11 @@ class StockTransactionListView(ListAPIView):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        user = self.request.user
+        if user.is_staff or user.groups.filter(name='Manager').exists():
+            queryset = queryset
+        else:
+            queryset = queryset.filter(created_by=self.request.user)
         transaction_type = self.request.query_params.get('type')
         if transaction_type:
             queryset = queryset.filter(transaction_type__icontains=transaction_type)
@@ -176,6 +196,7 @@ class StockTransactionListView(ListAPIView):
 class StockTransactionCreate(CreateAPIView):
     queryset = StockTransaction.objects.all()
     serializer_class = StockTransactionCreateSerializer
+    permission_classes = [IsAuthenticated,IsManager]
 
     def perform_create(self, serializer):
         transaction = serializer.save(created_by=self.request.user)
