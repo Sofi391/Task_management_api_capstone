@@ -1,1 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+*.egg-info/
+.eggs/
+
+# Django
+*.log
+*.pot
+*.pyc
+__pycache__/
+db.sqlite3
+media/
+staticfiles/
+.env
+*.env
+local_settings.py
+
+# VSCode
+.vscode/
+
+# MySQL / Database
+*.sql
+*.dump
+
+# Pytest
+.pytest_cache/
+coverage/
+
+# IDE / Editor
 .idea/
+*.swp
+*.swo
+
+# Jupyter
+.ipynb_checkpoints/

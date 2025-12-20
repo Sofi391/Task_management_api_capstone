@@ -1,7 +1,184 @@
-from rest_framework import generics
-from .models import Product
-from .serializers import ProductSerializer
+from rest_framework.generics import ListAPIView, CreateAPIView
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.response import Response
+from rest_framework.decorators import action
+from django.core.mail import send_mail
+from django.conf import settings
+from rest_framework.viewsets import ModelViewSet
+from rest_framework import filters, status
+from .models import Product, Supplier, PurchaseOrder, StockTransaction,Sale
+from .serializers import (ProductSerializer, SupplierSerializer,
+                          PurchaseOrderSerializer,StockTransactionSerializer,
+                          SaleSerializer,StockTransactionCreateSerializer,
+                          )
 
-class ProductListCreateAPIView(generics.ListCreateAPIView):
+
+def low_stock_alert(product):
+    subject = f"Low Stock Alert: {product.name}"
+    message = f"""
+Hello,
+
+This is an automated notification to inform you that the stock level for the following product has reached its reorder threshold.
+
+Product details:
+
+Product name: {product.name}
+
+SKU: {product.sku}
+
+Current stock: {product.current_stock}
+
+Reorder level: {product.reorder_level}
+
+Supplier: {product.supplier}
+
+To avoid running out of stock, please consider restocking this product as soon as possible.
+
+You can review the product and take action from the inventory management system.
+
+If this message was sent in error, please ignore it.
+
+Best regards,
+Inventory Management System
+    """
+    from_email = f"Inventory Management System<{settings.EMAIL_HOST_USER}>"
+    recipient_list = ['sofi123man@gmail.com']
+    send_mail(subject, message, from_email, recipient_list, fail_silently=False)
+
+
+class SupplierViewSet(ModelViewSet):
+    queryset = Supplier.objects.all()
+    serializer_class = SupplierSerializer
+    lookup_field = 'slug'
+    pagination_class = PageNumberPagination
+    filter_backends = (filters.SearchFilter,)
+    search_fields = ('name','products__name','products__category')
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        from_date = self.request.query_params.get('from')
+        to_date = self.request.query_params.get('to')
+        if from_date:
+            queryset = queryset.filter(products__created_at__gte=from_date)
+        if to_date:
+            queryset = queryset.filter(products__created_at__lte=to_date)
+        return queryset.distinct()
+
+
+class ProductViewSet(ModelViewSet):
     queryset = Product.objects.all()
     serializer_class = ProductSerializer
+    pagination_class = PageNumberPagination
+    lookup_field = 'slug'
+    filter_backends = (filters.SearchFilter,filters.OrderingFilter)
+    search_fields = ('name','category','sku','supplier__name')
+    ordering_fields = ('buying_price','selling_price','created_at','current_stock','reorder_level')
+    ordering = ('-created_at',)
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        supplier = self.request.query_params.get('supplier')
+        if supplier:
+            queryset = queryset.filter(supplier__name__icontains=supplier)
+        return queryset
+
+
+class PurchaseViewSet(ModelViewSet):
+    queryset = PurchaseOrder.objects.all()
+    serializer_class = PurchaseOrderSerializer
+    pagination_class = PageNumberPagination
+    ordering = ('-created_at',)
+    filter_backends = (filters.SearchFilter,)
+    search_fields = ('product__name','product__category')
+
+    @action(detail=True,methods=['post'])
+    def complete(self, request, pk=None):
+        purchase = self.get_object()
+        if purchase.status != 'Pending':
+            return Response(
+            {"detail": f"Purchase is already {purchase.status}."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        purchase.status = "Completed"
+        purchase.save()
+
+        StockTransaction.objects.create(
+            transaction_type = 'IN',
+            quantity = purchase.quantity,
+            unit_price = purchase.unit_price,
+            product = purchase.product,
+            created_by = self.request.user,
+            note = f"Purchase Completed with id:{purchase.id}"
+        )
+
+        return Response({
+            'detail':'Purchase Completed!'
+        })
+
+
+class SaleViewSet(ModelViewSet):
+    queryset = Sale.objects.all()
+    serializer_class = SaleSerializer
+    pagination_class = PageNumberPagination
+    ordering = ('-created_at',)
+    filter_backends = (filters.SearchFilter,)
+    search_fields = ('product__name','product__category')
+
+    def perform_create(self, serializer):
+        product = serializer.validated_data['product']
+        serializer.save(sold_by=self.request.user,selling_price=product.selling_price)
+
+    @action(detail=True,methods=['post'])
+    def complete(self, request, pk=None):
+        sales = self.get_object()
+        if sales.status != 'Pending':
+            return Response(
+            {"detail": f"Sales is already {sales.status}."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        sales.status = "Completed"
+        sales.save()
+
+        StockTransaction.objects.create(
+            transaction_type = 'OUT',
+            quantity = sales.quantity,
+            unit_price = sales.selling_price,
+            product = sales.product,
+            created_by = self.request.user,
+            note = f"Sales Completed with id:{sales.id}"
+        )
+        if sales.product.current_stock<=sales.product.reorder_level:
+            low_stock_alert(sales.product)
+
+        return Response({
+            'detail':'Sales Completed!'
+        })
+
+
+class StockTransactionListView(ListAPIView):
+    queryset = StockTransaction.objects.all()
+    serializer_class = StockTransactionSerializer
+    pagination_class = PageNumberPagination
+
+    filter_backends = (filters.SearchFilter,filters.OrderingFilter)
+    search_fields = ('product__name','product__category','created_by__username')
+    ordering_fields = ('created_at',)
+    ordering = ('-created_at',)
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        transaction_type = self.request.query_params.get('type')
+        if transaction_type:
+            queryset = queryset.filter(transaction_type__icontains=transaction_type)
+        return queryset
+
+
+class StockTransactionCreate(CreateAPIView):
+    queryset = StockTransaction.objects.all()
+    serializer_class = StockTransactionCreateSerializer
+
+    def perform_create(self, serializer):
+        transaction = serializer.save(created_by=self.request.user)
+        if transaction.product.current_stock <= transaction.product.reorder_level:
+            low_stock_alert(transaction.product)
+        return transaction
