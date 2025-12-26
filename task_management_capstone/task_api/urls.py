@@ -5,7 +5,6 @@ from .views import (ProductViewSet,SupplierViewSet,PurchaseViewSet,
                     StockTransactionCreate,
                     )
 
-
 router = DefaultRouter()
 router.register('supplier',SupplierViewSet)
 router.register('products', ProductViewSet)

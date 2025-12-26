@@ -28,6 +28,7 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = '__all__'
+        read_only_fields = ['current_stock', ]
 
 
 class PurchaseOrderSerializer(serializers.ModelSerializer):
