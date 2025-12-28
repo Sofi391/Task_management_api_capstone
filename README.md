@@ -12,6 +12,12 @@ This API is designed to be easily extended into a full-stack production system.
 
 ---
 
+## 🌐 Live Demo
+
+You can test the live API here: [Inventory Management API Live](https://task_management_api.onrender.com/)
+
+---
+
 ## ✨ Motivation
 
 This project was built to simulate a **real-world inventory and sales management system** used by businesses to:
@@ -116,7 +122,7 @@ This separation ensures **scalability**, **maintainability**, and clean responsi
 ## 🚀 API Documentation
 
 📮 **Postman Collection:**  
-> _Coming soon_ — a full Postman documentation link will be attached here.
+**API Documentation / Postman Collection:** [Click Here]()
 
 The API is fully documented via Postman, covering:
 - Authentication flows
