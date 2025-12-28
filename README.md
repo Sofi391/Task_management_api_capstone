@@ -14,7 +14,7 @@ This API is designed to be easily extended into a full-stack production system.
 
 ## 🌐 Live Demo
 
-You can test the live API here: [Inventory Management API Live](https://task_management_api.onrender.com/)
+You can test the live API here: [Inventory Management API Live](https://task-management-api-ft4y.onrender.com)
 
 ---
 
@@ -122,7 +122,7 @@ This separation ensures **scalability**, **maintainability**, and clean responsi
 ## 🚀 API Documentation
 
 📮 **Postman Collection:**  
-**API Documentation / Postman Collection:** [Click Here]()
+**API Documentation / Postman Collection:** [Click Here](https://documenter.getpostman.com/view/48400327/2sBXVbGYdx)
 
 The API is fully documented via Postman, covering:
 - Authentication flows
